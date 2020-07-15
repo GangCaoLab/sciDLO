@@ -46,6 +46,7 @@ struct Counter {
      total: u64,
      pet1_len_cnts: HashMap<usize, u64>,
      pet2_len_cnts: HashMap<usize, u64>,
+     barcode_cnts: HashMap<String, u64>,
 }
 
 impl Counter {
@@ -63,6 +64,7 @@ impl Counter {
                total: 0,
                pet1_len_cnts: HashMap::new(),
                pet2_len_cnts: HashMap::new(),
+               barcode_cnts: HashMap::new(),
           }
      }
 }
@@ -92,6 +94,7 @@ impl ops::Add<Counter> for Counter {
                total: self.total + _rhs.total,
                pet1_len_cnts: add_hashmap(self.pet1_len_cnts, _rhs.pet1_len_cnts),
                pet2_len_cnts: add_hashmap(self.pet2_len_cnts, _rhs.pet2_len_cnts),
+               barcode_cnts: add_hashmap(self.barcode_cnts, _rhs.barcode_cnts),
           }
      }
 }
@@ -136,6 +139,13 @@ impl fmt::Display for Counter {
           keys_pet2.sort();
           for k in keys_pet2 {
                msg.push_str(&format!("{}\t{}\n", k, self.pet2_len_cnts.get(k).unwrap()));
+          }
+          msg.push_str("\n");
+          msg.push_str("barcodes counts:\n");
+          let mut items_bar_cnts: Vec<(&String, &u64)> = self.barcode_cnts.iter().collect();
+          items_bar_cnts.sort_by(|t1, t2| t2.1.cmp(t1.1));
+          for (barcode, cnt) in items_bar_cnts {
+               msg.push_str(&format!("{}\t{}\n", barcode, cnt));
           }
           write!(f, "{}", msg)
      }
@@ -254,6 +264,7 @@ impl Extractor {
                let barcode = self.extract_barcode(seq1, seq2, &aln1, &aln2);
                p1_id = format!("{}/{}", p1_id, barcode);
                p2_id = format!("{}/{}", p2_id, barcode);
+               *counter.barcode_cnts.entry(barcode).or_insert(0) += 1;
           }
           let pet1 = Record::with_attrs(&p1_id, None, pet1.as_bytes(), &rec1.qual()[0..pet1.len()]);
           let pet2 = Record::with_attrs(&p2_id, None, pet2.as_bytes(), &rec2.qual()[0..pet2.len()]);
