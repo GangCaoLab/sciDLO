@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "expet",
+    "spcell",
+    "utils",
+]

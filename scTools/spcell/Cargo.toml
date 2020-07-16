@@ -1,0 +1,17 @@
+[package]
+name = "spcell"
+version = "0.1.0"
+authors = ["nanguage <nanguage@yahoo.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+utils = { path = "../utils"}
+clap = "2.33.0"
+log = "0.4"
+simple_logger = "1.6.0"
+strsim = "0.10.0"
+vpsearch = "2.0.1"
+regex = "1"
+bio = "*"

@@ -1,17 +1,16 @@
 use std::fs::File;
-use std::io::Read;
 use std::thread;
 use std::sync::mpsc;
 use std::sync::{Mutex, Arc};
 use std::time::Duration;
 use std::collections::HashMap;
 use std::ops;
-use std::hash::Hash;
 use std::fmt;
+use std::io;
+use std::io::prelude::*;
 
 extern crate bio;
 extern crate clap;
-extern crate flate2;
 extern crate log;
 extern crate simple_logger;
 
@@ -21,15 +20,12 @@ use bio::alignment::Alignment;
 use bio::io::{fastq};
 use bio::io::fastq::Record;
 use log::{info};
-use flate2::read::GzDecoder;
 
-fn read_fq(fq_path: String) -> fastq::Reader<Box<dyn Read + Send + Sync>> {
-    let fq_file: Box<dyn Read + Send + Sync> = if fq_path.ends_with(".gz") {
-        Box::new(GzDecoder::new(File::open(fq_path).unwrap()))
-    } else {
-        Box::new(File::open(fq_path).unwrap())
-    };
-    fastq::Reader::new(fq_file)
+use utils::{open_file, add_hashmap};
+
+fn open_fq(fq_path: String) -> fastq::Reader<io::BufReader<Box<dyn Read + Send + Sync>>> {
+    let f = open_file(&fq_path);
+    fastq::Reader::new(f)
 }
 
 #[derive(Clone)]
@@ -67,14 +63,6 @@ impl Counter {
                barcode_cnts: HashMap::new(),
           }
      }
-}
-
-fn add_hashmap<T: Clone + Eq + Hash>(m1: HashMap<T, u64>, m2: HashMap<T, u64>) -> HashMap<T, u64> {
-     let mut m = m1.clone();
-     for (k, v) in m2 {
-          *m.entry(k).or_insert(v) += v;
-     }
-     return m
 }
 
 impl ops::Add<Counter> for Counter {
@@ -258,16 +246,14 @@ impl Extractor {
           *counter.pet1_len_cnts.entry(pet1.len()).or_insert(0) += 1;
           *counter.pet2_len_cnts.entry(pet2.len()).or_insert(0) += 1;
 
-          let mut p1_id = rec1.id().to_string();
-          let mut p2_id = rec2.id().to_string();
+          let mut p_id = rec1.id().to_string();
           if self.is_extract_barcode {
                let barcode = self.extract_barcode(seq1, seq2, &aln1, &aln2);
-               p1_id = format!("{}/{}", p1_id, barcode);
-               p2_id = format!("{}/{}", p2_id, barcode);
+               p_id = format!("{}/{}", p_id, barcode);
                *counter.barcode_cnts.entry(barcode).or_insert(0) += 1;
           }
-          let pet1 = Record::with_attrs(&p1_id, None, pet1.as_bytes(), &rec1.qual()[0..pet1.len()]);
-          let pet2 = Record::with_attrs(&p2_id, None, pet2.as_bytes(), &rec2.qual()[0..pet2.len()]);
+          let pet1 = Record::with_attrs(&p_id, None, pet1.as_bytes(), &rec1.qual()[0..pet1.len()]);
+          let pet2 = Record::with_attrs(&p_id, None, pet2.as_bytes(), &rec2.qual()[0..pet2.len()]);
           return Ok((pet1, pet2))
      }
 
@@ -284,13 +270,14 @@ impl Extractor {
      }
 }
 
-fn new_writers(prefix: &str, barcode: &Option<String>) -> (fastq::Writer<File>, fastq::Writer<File>) {
+fn new_writers(prefix: &str, barcode: &Option<String>) -> (fastq::Writer<io::BufWriter<File>>,
+                                                           fastq::Writer<io::BufWriter<File>>) {
      let (pet1_out_path, pet2_out_path) = match barcode {
           Some(b) => (format!("{}_{}.pet1.fq", prefix, b), format!("{}_{}.pet2.fq", prefix, b)),
           None => (format!("{}.pet1.fq", prefix), format!("{}.pet2.fq", prefix))
      };
-     let pet1_out_f = File::create(pet1_out_path).unwrap();
-     let pet2_out_f = File::create(pet2_out_path).unwrap();
+     let pet1_out_f = io::BufWriter::new(File::create(pet1_out_path).unwrap());
+     let pet2_out_f = io::BufWriter::new(File::create(pet2_out_path).unwrap());
      let writer_pet1 = fastq::Writer::new(pet1_out_f);
      let writer_pet2 = fastq::Writer::new(pet2_out_f);
      (writer_pet1, writer_pet2)
@@ -299,7 +286,7 @@ fn new_writers(prefix: &str, barcode: &Option<String>) -> (fastq::Writer<File>, 
 fn main() {
      simple_logger::init().unwrap();
 
-     let matches = App::new("Extract and counting seq pairs.")
+     let matches = App::new("Extract PETs.")
           .arg(Arg::with_name("fq1")
                .required(true)
                .help("Fastq file of reads 2."))
@@ -384,8 +371,8 @@ fn main() {
      info!("fastq1: {} fastq2: {}\n linker: {} enzyme: {}\nscore_ratio_thresh: {}, threads: {}",
            fq1_path, fq2_path, linker, enzyme, score_ratio_thresh, threads);
 
-     let recs_1 = read_fq(fq1_path.to_string()).records();
-     let recs_2 = read_fq(fq2_path.to_string()).records();
+     let recs_1 = open_fq(fq1_path.to_string()).records();
+     let recs_2 = open_fq(fq2_path.to_string()).records();
 
      let extractor = Extractor::new(&linker, &enzyme, score_ratio_thresh,
           min_pet_len, max_pet_len, pet_cut_len, split_barcode);
@@ -464,5 +451,9 @@ fn main() {
           counter = counter + counters[i].lock().unwrap().clone();
      }
      info!("{}", counter);
+     
+     let counter_res_path = format!("{}.count.txt", output_prefix);
+     let mut counter_res_file = File::create(counter_res_path).unwrap();
+     write!(counter_res_file, "{}", counter).unwrap();
 
 }
