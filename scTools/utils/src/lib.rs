@@ -8,7 +8,6 @@ use std::ops::{AddAssign};
 extern crate flate2;
 use flate2::read::GzDecoder;
 
-
 pub fn open_file(path: &str) -> io::BufReader<Box<dyn Read + Send + Sync>> {
     let f: Box<dyn Read + Send + Sync> = if path.ends_with(".gz") {
         Box::new(GzDecoder::new(File::open(path).unwrap()))
@@ -33,6 +32,7 @@ where T: Clone + Eq + Hash, R: Clone + AddAssign + Copy, {
      }
      return m
 }
+
 
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::sync::{Mutex, Arc};
 use std::time::Duration;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt;
 use std::io::{self, prelude::*};
 use std::ops;
@@ -20,6 +21,7 @@ use log::{info};
 use strsim::{hamming};
 use regex::Regex;
 use bio::alphabets::dna::revcomp;
+
 
 use utils::{read_lines, open_file, add_hashmap};
 
@@ -161,9 +163,10 @@ impl fmt::Display for Counter {
 
 
 
-fn locate_barcode(
+fn locate_barcode<'a>(
         pair_rec: &PairRec,
-        search: &BarcodeSearch,
+        search: &'a BarcodeSearch,
+        search_cache: &mut HashMap<String, Option<(&'a String, usize)>>,
         max_diff_b1b2: usize,
         max_diff_r1r2: usize,
         counter: &mut Counter,
@@ -186,7 +189,14 @@ fn locate_barcode(
                  &pair_rec.code_r2_l, &pair_rec.code_r2_r];
     let mut res_vec = Vec::with_capacity(4);
     for code in &codes {
-        if let Some((barcode, dist)) = search.search(code) {
+        let res = match search_cache.entry(code.to_string()) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => {
+                let r = search.search(code);
+                v.insert(r)
+            }
+        };
+        if let Some((barcode, dist)) = *res {
             res_vec.push((barcode, dist))
         }
     }
@@ -287,7 +297,7 @@ fn main() {
         let counters = Arc::clone(&counters);
         let tx1 = mpsc::Sender::clone(&tx);
         let handle = thread::spawn(move || {
-            let mut counter = Counter::new();
+            let mut search_cache = HashMap::new();
             loop {
                 let line = {
                     let mut lines = lines.lock().unwrap();
@@ -304,7 +314,7 @@ fn main() {
                 let rec = PairRec::from_line(&line, &re_codes);
                 let b = {
                     let mut counter = counters[t_id as usize].lock().unwrap();
-                    locate_barcode(&rec, &barcode_search, max_diff_b1b2, max_diff_r1r2, &mut counter)
+                    locate_barcode(&rec, &barcode_search, &mut search_cache, max_diff_b1b2, max_diff_r1r2, &mut counter)
                 };
                 tx1.send((line, b)).unwrap();
             }
@@ -312,10 +322,11 @@ fn main() {
         handles.push(handle);
     }
 
-    let mut code_to_file = HashMap::new();
+    let mut code_to_file: HashMap<String, _> = HashMap::new();
 
     let open_out_file = |code| {
         let file_name = format!("{}.{}.pairs", output_prefix, code);
+        info!("open {}", file_name);
         io::BufWriter::new(File::create(file_name).unwrap())
     };
 
@@ -323,8 +334,12 @@ fn main() {
         match rx.recv_timeout(Duration::from_millis(wait_t)) {
             Ok((line, b)) => {
                 if let Some(code) = b {
-                    let f = code_to_file.entry(code.clone()).or_insert(open_out_file(code));
-                    write!(*f, "{}\n", line).unwrap();
+                    if let None = code_to_file.get(&code) {
+                        let f_ = open_out_file(code.clone());
+                        code_to_file.insert(code.clone(), f_);
+                    };
+                    let f = code_to_file.get_mut(&code).unwrap();
+                    write!(f, "{}\n", line).unwrap();
                 }
             },
             _ => {
