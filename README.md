@@ -12,8 +12,8 @@ Single cell DLO Hi-C analysis pipeline.
 $ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 $ export PATH=$PATH:~/.cargo/bin  # add cargo path to the PATH env variable
 # Compile
-$ cd extpet; cargo build --release
+$ cd scTools; cargo build --release
 ```
 
-3. Add `<path_the_repo>/extpet/target/release` and `<path_the_repo>/script` to PATH in your `.bashrc`.
+3. Add `export PATH=<path_the_repo>/scripts:$PATH` to the end of your `.bashrc`.
 
