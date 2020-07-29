@@ -1,17 +1,38 @@
 #!/usr/bin/env nextflow
 
-reads = Channel.fromFilePairs(params.input_reads)
+Channel.fromFilePairs(params.input_reads)
+    .set{reads}
+
+process unzip {
+    input:
+        tuple val(lib_id), file(reads) from reads
+    output:
+        tuple val(lib_id), file("*_{1,2}.fq") into unziped
+    
+    publishDir 'result/tmp/unzip'
+
+    """
+    if [[ ${reads[0]} == *.gz ]]; then
+        unpigz ${reads[0]} -p $task.cpus -c > ${lib_id}_1.fq
+        unpigz ${reads[1]} -p $task.cpus -c > ${lib_id}_2.fq
+    else
+        ln -s ${reads[0]} ${lib_id}_1.fq
+        ln -s ${reads[1]} ${lib_id}_2.fq
+    fi
+    """
+}
 
 process extract_PETs {
     input:
-        tuple val(lib_id), file(reads) from reads
+        tuple val(lib_id), file(reads) from unziped
 
     output:
         tuple val(lib_id), file("*.pet{1,2}.fq") into pets
 
-    "expet $reads --linker $params.linker --enzyme $params.enzyme --output_prefix $lib_id -t $params.cpus -b"
-}
+    publishDir 'result/tmp/extract_PETs'
 
+    "expet $reads --linker $params.linker --enzyme $params.enzyme --output_prefix $lib_id -t $task.cpus -b"
+}
 
 process build_bedpe {
     input:
@@ -20,10 +41,12 @@ process build_bedpe {
     output:
         tuple val(lib_id), file("*.uniq.bedpe") into bedpes
 
-    "dlohic build_bedpe $pets $lib_id --bwa-index $params.bwa_index_prefix -p $params.cpus"
+    publishDir 'result/tmp/build_bedpe'
+
+    "dlohic build_bedpe $pets $lib_id --bwa-index $params.bwa_index_prefix -p $task.cpus"
 }
 
-rest_sites_file = Channel.create()
+rest_sites_file = Channel.value()
 rest_file_exists = params.rest_file != "" && file(params.rest_file).exists()
 if (rest_file_exists) {
     rest_sites_file << params.rest_file
@@ -43,18 +66,20 @@ process extract_fragments {
     when:
         !rest_file_exists
 
-    "dlohic extract_fragments ${params.fasta_path} ${params.enzyme_name}.hdf5 -f hdf5 -p $params.cpus -r $params.enzyme"
+    "dlohic extract_fragments ${params.fasta_path} ${params.enzyme_name}.hdf5 -f hdf5 -p $task.cpus -r $params.enzyme"
 }
 
 process noise_reduce {
     input:
         tuple val(lib_id), file(bedpe) from bedpes
-        file rest_file from rest_sites_file
+        val rest_file from rest_sites_file
     
     output:
         tuple val(lib_id), file("*.nr.bedpe") into nr_bedpes
 
-    "dlohic noise_reduce $bedpe ${lib_id}.nr.bedpe -r $rest_file -p $params.cpus"
+    publishDir 'result/tmp/noise_reduce'
+
+    "dlohic noise_reduce $bedpe ${lib_id}.nr.bedpe -r $rest_file -p $task.cpus"
 }
 
 process build_pairs {
@@ -64,7 +89,9 @@ process build_pairs {
     output:
         tuple val(lib_id), file("*.pairs") into pairs_files_1, pairs_files_2
 
-    "dlohic bedpe2pairs $nr_bedpe ${lib_id}.pairs --keep --remove-redundancy --ncpu $params.cpus"
+    publishDir 'result/tmp/build_pairs'
+
+    "dlohic bedpe2pairs $nr_bedpe ${lib_id}.pairs --keep --remove-redundancy --ncpu $task.cpus"
 }
 
 juicer_tools_jar = Channel.value()
@@ -83,7 +110,7 @@ process download_juicer_tools_jar {
 
     when:
         !jar_exists
-
+    
     "wget https://s3.amazonaws.com/hicfiles.tc4ga.com/public/juicer/juicer_tools_1.22.01.jar -O juicer_tools.jar"
 }
 
@@ -91,9 +118,11 @@ process split_cells {
     input:
         tuple val(lib_id), file(pairs) from pairs_files_1
     output:
-        tuple val(lib_id), file("*.cell.*.pairs") into _pairs_per_cell 
+        tuple val(lib_id), file("${lib_id}.cell.*.pairs") into _pairs_per_cell 
+
+    publishDir 'result/spcell'
     
-    "spcell $pairs $params.barcodes_file -o ${lib_id}.cell"
+    "spcell $pairs $params.barcodes_file -o ${lib_id}.cell -t $task.cpus"
 }
 
 _pairs_per_cell
@@ -114,10 +143,12 @@ process sort_pairs_per_cell {
         tuple val(cell_id), file(pairs) from pairs_per_cell
     output:
         tuple val(cell_id), file("*.cell.*.sorted.pairs") into sorted_pairs_per_cell
+
+    publishDir 'result/pairs_cell'
     
     """
     echo "## pairs format v1.0\n#columns: readID chr1 position1 chr2 position2 strand1 strand2" > ${cell_id}.sorted.pairs
-    sort --parallel=${params.cpus} -k2,2 -k4,4 -k3,3n -k5,5n -k6,6 -k7,7 $pairs >> ${cell_id}.sorted.pairs
+    sort --parallel=${task.cpus} -k2,2 -k4,4 -k3,3n -k5,5n -k6,6 -k7,7 $pairs >> ${cell_id}.sorted.pairs
     """
 }
 
@@ -127,11 +158,11 @@ process build_dot_hic_per_cell {
         val jar from juicer_tools_jar
     output:
         tuple val(cell_id), file("*.cell.*.hic") into dot_hics_per_cell
+
+    publishDir 'result/dot_hic_cell'
     
     "java -jar $jar pre $pairs ${cell_id}.hic ${params.chrom_file} -r $params.resolutions"
 }
-
-dot_hics_per_cell.println()
 
 _pairs_per_cell_2
     .map { cell_id, cell_pairs ->
@@ -146,10 +177,12 @@ process merge_pairs_per_library {
     input:
         tuple val(lib_id), file(pairs_files) from grouped_cells_one_lib
     output:
-        tuple val(lib_id), file("*.merge.pairs") into merged_pairs
+        tuple val(lib_id), file("*.merge.pairs") into merged_pairs, merged_pairs_2
+
+    publishDir 'result/pairs_lib'
     """
     echo "## pairs format v1.0\n#columns: readID chr1 position1 chr2 position2 strand1 strand2" > ${lib_id}.merge.pairs
-    cat $pairs_files | sort --parallel=${params.cpus} -k2,2 -k4,4 -k3,3n -k5,5n -k6,6 -k7,7 >> ${lib_id}.merge.pairs
+    cat $pairs_files | sort --parallel=${task.cpus} -k2,2 -k4,4 -k3,3n -k5,5n -k6,6 -k7,7 >> ${lib_id}.merge.pairs
     """
 }
 
@@ -161,8 +194,37 @@ process build_dot_hic_per_library {
     output:
         tuple val(lib_id), file("*.hic") into dot_hics
 
+    publishDir 'result/dot_hic_lib'
+
     "java -jar $jar pre $pairs ${lib_id}.hic ${params.chrom_file} -r $params.resolutions"
 }
 
+merged_pairs_2
+    .map{lib_id, f -> return f }
+    .collect()
+    .set{for_merge_all}
 
-dot_hics.println()
+process merge_all_pairs {
+    input:
+        file(pairs_files) from for_merge_all
+    output:
+        file("merge_all.pairs") into merge_all_pairs
+    
+    publishDir 'result/pairs_all'
+    """
+    echo "## pairs format v1.0\n#columns: readID chr1 position1 chr2 position2 strand1 strand2" > merge_all.pairs
+    cat $pairs_files | sort --parallel=${task.cpus} -k2,2 -k4,4 -k3,3n -k5,5n -k6,6 -k7,7 >> merge_all.pairs
+    """
+}
+
+process build_dot_hic_all {
+    input:
+        file(pairs) from merge_all_pairs
+        val jar from juicer_tools_jar
+    output:
+        file("merge_all.hic") into merge_all_hic
+    
+    publishDir 'result/dot_hic_all'
+
+    "java -jar $jar pre $pairs merge_all.hic ${params.chrom_file} -r $params.resolutions"
+}
