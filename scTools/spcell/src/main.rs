@@ -267,7 +267,7 @@ fn main() {
     let output_prefix = matches.value_of("output_prefix").unwrap();
     let threads = matches.value_of("threads").unwrap_or("1");
     let threads: u8 = threads.parse().unwrap();
-    let wait_t = matches.value_of("wait_timeout").unwrap_or("500");
+    let wait_t = matches.value_of("wait_timeout").unwrap_or("2000");
     let wait_t: u64 = wait_t.parse().unwrap();
 
     info!("pairs_file: {} barcodes_file: {}\n \

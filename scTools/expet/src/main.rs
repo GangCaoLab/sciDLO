@@ -365,7 +365,7 @@ fn main() {
      let output_prefix = matches.value_of("output_prefix").unwrap();
      let threads = matches.value_of("threads").unwrap_or("1");
      let threads: u8 = threads.parse().unwrap();
-     let wait_t = matches.value_of("wait_timeout").unwrap_or("500");
+     let wait_t = matches.value_of("wait_timeout").unwrap_or("2000");
      let wait_t: u64 = wait_t.parse().unwrap();
 
      info!("fastq1: {} fastq2: {}\n linker: {} enzyme: {}\nscore_ratio_thresh: {}, threads: {}",
@@ -377,8 +377,7 @@ fn main() {
      let extractor = Extractor::new(&linker, &enzyme, score_ratio_thresh,
           min_pet_len, max_pet_len, pet_cut_len, split_barcode);
 
-     let recs_1 = Arc::new(Mutex::new(recs_1));
-     let recs_2 = Arc::new(Mutex::new(recs_2));
+     let recs = Arc::new(Mutex::new((recs_1, recs_2)));
      let extractor = Arc::new(extractor);
      let mut counters = vec![];
      for _ in 0..threads { counters.push(Arc::new(Mutex::new(Counter::new()))) };
@@ -387,32 +386,29 @@ fn main() {
      let (tx, rx) = mpsc::channel();
 
      for t_id in 0..threads {
-          let recs_1 = Arc::clone(&recs_1);
-          let recs_2 = Arc::clone(&recs_2);
+          let recs = Arc::clone(&recs);
           let extractor = Arc::clone(&extractor);
           let counters = Arc::clone(&counters);
           let tx1 = mpsc::Sender::clone(&tx);
           let handle = thread::spawn(move || {
                loop {
-                    let rec1 = {
-                         let mut recs_1 = recs_1.lock().unwrap();
-                         match recs_1.next() {
+                    let (rec1, rec2) = {
+                         let mut recs = recs.lock().unwrap();
+                         let rec1 = match recs.0.next() {
                               Some(r) => match r {
                                   Ok(r_) => r_,
                                   Err(e) => panic!("{:?}", e),
                               },
                               None => break
-                         }
-                    };
-                    let rec2 = {
-                         let mut recs_2 = recs_2.lock().unwrap();
-                         match recs_2.next() {
+                         };
+                         let rec2 = match recs.1.next() {
                              Some(r) => match r {
                                  Ok(r_) => r_,
                                  Err(e) => panic!("{:?}", e),
                              },
                              None => break
-                         }
+                         };
+                         (rec1, rec2)
                     };
                     let res = {
                          let mut counter = counters[t_id as usize].lock().unwrap();
