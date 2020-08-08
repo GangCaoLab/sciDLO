@@ -277,18 +277,18 @@ impl Extractor {
             pet1.push_str(&self.enzyme[2]);
         }
         if pet1.len() < self.min_pet_len {
-            // pet1 cut
             counter.p1_too_short += 1;
             return Err(());
         }
         if pet1.len() > self.max_pet_len {
+            // pet1 cut
             counter.p1_too_long += 1;
             pet1 = pet1[(pet1.len() - self.pet_cut_len)..pet1.len()].to_string();
         }
 
         let mut pet2;
         let barcode;
-        let qual2;
+        let mut qual2;
         if let Some(rec2) = rec2 {
             // In PE mode, align linker to rec2
             let mut seq2 = rec2.seq();
@@ -310,30 +310,24 @@ impl Extractor {
             }
             // PE mode, extract pet2 from rec2's head
             pet2 = String::from_utf8(seq2[0..aln2.ystart].to_vec()).unwrap();
-            barcode = self.extract_barcode_pe(seq1, seq2, &aln1, &aln2);
             qual2 = rec2.qual()[0..pet2.len()].to_vec();
+            match self.cut_pet2(&mut pet2, &mut qual2, counter) {
+                Ok(()) => {},
+                Err(()) => return Err(()),
+            };
+            barcode = self.extract_barcode_pe(seq1, seq2, &aln1, &aln2);
         } else {
             // SE mode, extract pet2 from rec1's tail
             let p2 = seq1[aln1.yend..seq1.len()].to_vec();
             let p2_rc = revcomp(&p2);
             pet2 = String::from_utf8(p2_rc).unwrap();
+            qual2 = rec1.qual()[aln1.yend..seq1.len()].to_vec();
+            qual2.reverse();
+            match self.cut_pet2(&mut pet2, &mut qual2, counter) {
+                Ok(()) => {},
+                Err(()) => return Err(()),
+            };
             barcode = self.extract_barcode_se(seq1, &aln1);
-            qual2 = rec1.qual()[0..pet1.len()].to_vec();
-        }
-
-        if pet2.ends_with(&self._enzyme_half) {
-            // add addition base to pet2
-            counter.p2_add_base += 1;
-            pet2.push_str(&self.enzyme[2]);
-        }
-        if pet2.len() < self.min_pet_len {
-            // cut pet2
-            counter.p2_too_short += 1;
-            return Err(());
-        }
-        if pet2.len() > self.max_pet_len {
-            counter.p2_too_long += 1;
-            pet2 = pet2[(pet2.len() - self.pet_cut_len)..pet2.len()].to_string();
         }
 
         counter.valid += 1;
@@ -349,6 +343,31 @@ impl Extractor {
         let pet1 = Record::with_attrs(&p_id, None, pet1.as_bytes(), &rec1.qual()[0..pet1.len()]);
         let pet2 = Record::with_attrs(&p_id, None, pet2.as_bytes(), &qual2);
         return Ok((pet1, pet2));
+    }
+
+    fn cut_pet2(
+        &self,
+        pet2: &mut String,
+        qual2: &mut Vec<u8>,
+        counter: &mut Counter,
+    ) -> Result<(), ()> {
+        if pet2.ends_with(&self._enzyme_half) {
+            // add addition base to pet2
+            counter.p2_add_base += 1;
+            pet2.push_str(&self.enzyme[2]);
+            qual2.push(70);
+        }
+        if pet2.len() < self.min_pet_len {
+            counter.p2_too_short += 1;
+            return Err(());
+        }
+        if pet2.len() > self.max_pet_len {
+            // cut pet2
+            counter.p2_too_long += 1;
+            *pet2 = pet2[(pet2.len() - self.pet_cut_len)..pet2.len()].to_string();
+            *qual2 = qual2[0..pet2.len()].to_vec()
+        }
+        return Ok(());
     }
 
     fn extract_barcode_pe(
