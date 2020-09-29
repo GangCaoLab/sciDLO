@@ -1,11 +1,12 @@
-# scDLO Hi-C
+# sciDLO Hi-C
 
-Single cell DLO Hi-C analysis pipeline.
+Single cell indexed DLO Hi-C analysis pipeline.
 
-## Dependency
+## Install
 
 1. Install [DLO-HiC-Tools](https://github.com/GangCaoLab/DLO-HiC-Tools#installation).
-2. Clone this repo, and compile the `extpet` tool.
+2. Install [Nextflow]https://www.nextflow.io/)(version >= 20.07.1.5412)
+3. Clone this repo, and compile the `extpet` tool.
 
 ```bash
 # Install Rust
@@ -15,5 +16,10 @@ $ export PATH=$PATH:~/.cargo/bin  # add cargo path to the PATH env variable
 $ cd scTools; cargo build --release
 ```
 
-3. Add `export PATH=<path_the_repo>/scripts:$PATH` to the end of your `.bashrc`.
+4. Add `export PATH=<path_the_repo>/scripts:$PATH` to the end of your `.bashrc`.
 
+## Run pipeline
+
+1. Copy `main.nf` and `nextflow.config` to your working path.
+2. Modify `nextflow.config`.
+3. Run `nextflow run main.nf`.
