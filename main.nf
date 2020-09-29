@@ -31,7 +31,15 @@ process extract_PETs {
 
     publishDir 'result/tmp/extract_PETs'
 
-    "expet $reads --linker $params.linker --enzyme $params.enzyme --output_prefix $lib_id -t $task.cpus -b"
+    script:
+    if (params.SE_mode)
+        """
+        expet --fq1 ${reads[0]} --linker $params.linker --enzyme $params.enzyme --output_prefix $lib_id -t $task.cpus -b --adapter $params.adapter
+        """
+    else
+        """
+        expet --fq1 ${reads[0]} --fq2 ${reads[1]} --linker $params.linker --enzyme $params.enzyme --output_prefix $lib_id -t $task.cpus -b
+        """
 }
 
 process build_bedpe {

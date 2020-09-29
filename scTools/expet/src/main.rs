@@ -271,19 +271,22 @@ impl Extractor {
         }
         // Extract pet1 from rec1's head
         let mut pet1 = String::from_utf8(seq1[0..aln1.ystart].to_vec()).unwrap();
+        let mut qual1 = rec1.qual()[0..pet1.len()].to_vec();
         if pet1.ends_with(&self._enzyme_half) {
             // Add adition base to pet1
             counter.p1_add_base += 1;
             pet1.push_str(&self.enzyme[2]);
+            qual1.push(70)
         }
         if pet1.len() < self.min_pet_len {
             counter.p1_too_short += 1;
             return Err(());
         }
         if pet1.len() > self.max_pet_len {
-            // pet1 cut
+            // cut pet1
             counter.p1_too_long += 1;
             pet1 = pet1[(pet1.len() - self.pet_cut_len)..pet1.len()].to_string();
+            qual1 = qual1[0..pet1.len()].to_vec()
         }
 
         let mut pet2;
@@ -340,7 +343,7 @@ impl Extractor {
             p_id = format!("{}/{}", p_id, barcode);
             *counter.barcode_cnts.entry(barcode).or_insert(0) += 1;
         }
-        let pet1 = Record::with_attrs(&p_id, None, pet1.as_bytes(), &rec1.qual()[0..pet1.len()]);
+        let pet1 = Record::with_attrs(&p_id, None, pet1.as_bytes(), &qual1);
         let pet2 = Record::with_attrs(&p_id, None, pet2.as_bytes(), &qual2);
         return Ok((pet1, pet2));
     }

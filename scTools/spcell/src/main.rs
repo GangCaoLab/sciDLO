@@ -300,7 +300,7 @@ fn main() {
 
     let barcodes = load_barcodes(barcodes_path);
     let barcode_search = BarcodeSearch::new(barcodes, dist_thresh);
-    let re_codes: Regex = Regex::new(r".*/1/(.{8})-(.{8})-(.{8})-(.{8})\t").unwrap();
+    let re_codes: Regex = Regex::new(r".*/(.{8})-(.{8})-(.{8})-(.{8})\t").unwrap();
     let lines = open_file(pairs_path).lines();
 
     // variables shared by threads
