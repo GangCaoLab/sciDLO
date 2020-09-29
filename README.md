@@ -23,3 +23,17 @@ $ cd scTools; cargo build --release
 1. Copy `main.nf` and `nextflow.config` to your working path.
 2. Modify `nextflow.config`.
 3. Run `nextflow run main.nf`.
+
+## Result
+
+Result file of each steps will stored in the `result` folder in the working path.
+
+| sub folder | description |
+| -----------| ------------|
+| pairs_cell | pairs of each cell |
+| pairs_lib  | pairs of each library |
+| pairs_all  | merged pairs |
+| dot_hic_cell | .hic file of each cell |
+| dot_hic_lib | .hic file of each library |
+| dot_hic_all | .hic file of all merged reads |
+| tmp | intermediate files of each steps |
