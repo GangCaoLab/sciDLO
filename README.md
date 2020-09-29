@@ -5,7 +5,7 @@ Single cell indexed DLO Hi-C analysis pipeline.
 ## Install
 
 1. Install [DLO-HiC-Tools](https://github.com/GangCaoLab/DLO-HiC-Tools#installation).
-2. Install [Nextflow]https://www.nextflow.io/)(version >= 20.07.1.5412)
+2. Install [Nextflow](https://www.nextflow.io/)(version >= 20.07.1.5412)
 3. Clone this repo, and compile the `extpet` tool.
 
 ```bash
