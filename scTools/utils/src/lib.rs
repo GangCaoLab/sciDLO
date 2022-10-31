@@ -8,12 +8,17 @@ use std::path::Path;
 extern crate flate2;
 use flate2::read::GzDecoder;
 
-pub fn open_file(path: &str) -> io::BufReader<Box<dyn Read + Send + Sync>> {
+pub fn open_file(path: &str) -> Box<dyn Read + Send + Sync> {
     let f: Box<dyn Read + Send + Sync> = if path.ends_with(".gz") {
         Box::new(GzDecoder::new(File::open(path).unwrap()))
     } else {
         Box::new(File::open(path).unwrap())
     };
+    f
+}
+
+pub fn open_file_buffered(path: &str) -> io::BufReader<Box<dyn Read + Send + Sync>> {
+    let f = open_file(path);
     let buf_read = io::BufReader::new(f);
     buf_read
 }

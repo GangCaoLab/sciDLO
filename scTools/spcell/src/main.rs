@@ -22,7 +22,7 @@ use log::info;
 use regex::Regex;
 use strsim::hamming;
 
-use utils::{add_hashmap, open_file, read_lines};
+use utils::{add_hashmap, open_file_buffered, read_lines};
 
 fn load_barcodes(barcodes_file: &str) -> Vec<String> {
     let mut codes = vec![];
@@ -301,7 +301,7 @@ fn main() {
     let barcodes = load_barcodes(barcodes_path);
     let barcode_search = BarcodeSearch::new(barcodes, dist_thresh);
     let re_codes: Regex = Regex::new(r".*/(.{8})-(.{8})-(.{8})-(.{8})\t").unwrap();
-    let lines = open_file(pairs_path).lines();
+    let lines = open_file_buffered(pairs_path).lines();
 
     // variables shared by threads
     let barcode_search = Arc::new(barcode_search);
