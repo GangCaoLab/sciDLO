@@ -425,7 +425,7 @@ fn new_writers(
 }
 
 fn main() {
-    simple_logger::init().unwrap();
+    simple_logger::SimpleLogger::new().init().unwrap();
 
     let matches = App::new("Extract PETs.")
         .arg(

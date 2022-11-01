@@ -217,7 +217,7 @@ fn locate_barcode<'a>(
 }
 
 fn main() {
-    simple_logger::init().unwrap();
+    simple_logger::SimpleLogger::new().init().unwrap();
 
     let matches = App::new("Split pairs file by barcodes.")
         .arg(
